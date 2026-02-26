@@ -6,7 +6,6 @@ from http.server import BaseHTTPRequestHandler
 from bs4 import BeautifulSoup
 
 from lib.scraper_base import BaseScraper, Article
-from lib.supabase_client import get_filter_keywords
 
 
 class CadaMinutoScraper(BaseScraper):
@@ -17,26 +16,40 @@ class CadaMinutoScraper(BaseScraper):
         links = []
         for a in soup.select("a[href]"):
             href = a.get("href", "")
-            if isinstance(href, str) and href.startswith("https://www.cadaminuto.com.br/") and len(href) > 35:
+            if isinstance(href, str) and "/noticia/" in href and "cadaminuto.com.br" in href:
                 if href not in links:
                     links.append(href)
         return links[:20]
 
     def parse_article(self, soup: BeautifulSoup, url: str) -> Article | None:
-        title_el = soup.select_one("h1.entry-title") or soup.select_one("h1")
+        # cadaminuto uses h2 for article title, not h1
+        title_el = (
+            soup.select_one("h2.font-bold")
+            or soup.select_one("h1")
+            or soup.select_one("h2")
+        )
         if not title_el:
             return None
         title = title_el.get_text(strip=True)
+        if not title:
+            return None
 
-        body_el = soup.select_one(".entry-content") or soup.select_one("article")
-        body = body_el.get_text(separator="\n", strip=True) if body_el else ""
+        # Body: div.post-content or fallback to article paragraphs
+        body_el = soup.select_one("div.post-content") or soup.select_one("article")
+        if body_el:
+            paragraphs = body_el.select("p")
+            body = "\n".join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
+        else:
+            body = ""
 
-        first_para = ""
-        p = (body_el or soup).select_one("p")
-        if p:
-            first_para = p.get_text(strip=True)
+        first_para = body.split("\n")[0] if body else ""
 
-        img_el = soup.select_one(".wp-post-image") or soup.select_one(".entry-content img") or soup.select_one("article img")
+        # Image: inside <picture> tag
+        img_el = (
+            soup.select_one("picture img")
+            or soup.select_one("img[src*='cadaminuto']")
+            or soup.select_one(".post-content img")
+        )
         image_url = img_el.get("src") if img_el else None
 
         return Article(url=url, title=title, body=body, image_url=image_url, first_paragraph=first_para)

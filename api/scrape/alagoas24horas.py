@@ -2,10 +2,13 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import json
+import re
 from http.server import BaseHTTPRequestHandler
 from bs4 import BeautifulSoup
 
 from lib.scraper_base import BaseScraper, Article
+
+BASE = "https://www.alagoas24horas.com.br"
 
 
 class Alagoas24HorasScraper(BaseScraper):
@@ -16,26 +19,44 @@ class Alagoas24HorasScraper(BaseScraper):
         links = []
         for a in soup.select("a[href]"):
             href = a.get("href", "")
-            if isinstance(href, str) and "alagoas24horas.com.br/" in href and len(href) > 35:
+            if not isinstance(href, str):
+                continue
+            if href.startswith("/") and re.match(r"^/\d{6,7}(/|$)", href):
+                href = BASE + href
+            # Pattern: /NNNNNN/ or /NNNNNN/slug/
+            if "alagoas24horas.com.br" in href and re.search(r"/\d{6,7}(/|$)", href):
                 if href not in links:
                     links.append(href)
         return links[:20]
 
     def parse_article(self, soup: BeautifulSoup, url: str) -> Article | None:
-        title_el = soup.select_one("h1.entry-title") or soup.select_one("h1") or soup.select_one(".news-title")
+        title_el = soup.select_one("h1")
         if not title_el:
             return None
         title = title_el.get_text(strip=True)
+        if not title:
+            return None
 
-        body_el = soup.select_one(".entry-content") or soup.select_one(".news-body") or soup.select_one("article")
-        body = body_el.get_text(separator="\n", strip=True) if body_el else ""
+        # WordPress block editor
+        body_el = (
+            soup.select_one(".wp-content")
+            or soup.select_one(".entry-content")
+            or soup.select_one("article")
+        )
+        if body_el:
+            paragraphs = body_el.select("p")
+            body = "\n".join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
+        else:
+            body = ""
 
-        first_para = ""
-        p = (body_el or soup).select_one("p")
-        if p:
-            first_para = p.get_text(strip=True)
+        first_para = body.split("\n")[0] if body else ""
 
-        img_el = soup.select_one(".wp-post-image") or soup.select_one(".entry-content img") or soup.select_one("article img")
+        img_el = (
+            soup.select_one(".wp-block-image img")
+            or soup.select_one("img[class*='wp-image']")
+            or soup.select_one(".entry-content img")
+            or soup.select_one("article img")
+        )
         image_url = img_el.get("src") if img_el else None
 
         return Article(url=url, title=title, body=body, image_url=image_url, first_paragraph=first_para)

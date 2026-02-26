@@ -2,10 +2,13 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import json
+import re
 from http.server import BaseHTTPRequestHandler
 from bs4 import BeautifulSoup
 
 from lib.scraper_base import BaseScraper, Article
+
+BASE = "https://tribunahoje.com"
 
 
 class TribunaHojeScraper(BaseScraper):
@@ -16,26 +19,44 @@ class TribunaHojeScraper(BaseScraper):
         links = []
         for a in soup.select("a[href]"):
             href = a.get("href", "")
-            if isinstance(href, str) and href.startswith("https://tribunahoje.com/") and len(href) > 28:
+            if not isinstance(href, str):
+                continue
+            if href.startswith("/noticias/"):
+                href = BASE + href
+            # Article URLs: /noticias/category/YYYY/MM/DD/ID-slug
+            if "/noticias/" in href and re.search(r"/20\d{2}/\d{2}/\d{2}/", href):
                 if href not in links:
                     links.append(href)
         return links[:20]
 
     def parse_article(self, soup: BeautifulSoup, url: str) -> Article | None:
-        title_el = soup.select_one("h1.entry-title") or soup.select_one("h1") or soup.select_one(".noticia-titulo")
+        # TribunaHoje uses h2 for article title
+        title_el = (
+            soup.select_one("h1")
+            or soup.select_one("h2.title")
+            or soup.select_one("h2")
+        )
         if not title_el:
             return None
         title = title_el.get_text(strip=True)
+        if not title:
+            return None
 
-        body_el = soup.select_one(".entry-content") or soup.select_one(".noticia-texto") or soup.select_one("article")
-        body = body_el.get_text(separator="\n", strip=True) if body_el else ""
+        # Body: <p> tags after the byline
+        content_el = soup.select_one("article") or soup.select_one(".news-content") or soup.select_one("main")
+        if content_el:
+            paragraphs = content_el.select("p")
+            body = "\n".join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
+        else:
+            body = ""
 
-        first_para = ""
-        p = (body_el or soup).select_one("p")
-        if p:
-            first_para = p.get_text(strip=True)
+        first_para = body.split("\n")[0] if body else ""
 
-        img_el = soup.select_one(".wp-post-image") or soup.select_one(".entry-content img") or soup.select_one("article img")
+        img_el = (
+            soup.select_one("img[src*='s3.tribunahoje.com']")
+            or soup.select_one("article img")
+            or soup.select_one(".news-image img")
+        )
         image_url = img_el.get("src") if img_el else None
 
         return Article(url=url, title=title, body=body, image_url=image_url, first_paragraph=first_para)
