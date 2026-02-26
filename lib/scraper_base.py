@@ -28,24 +28,20 @@ class ScrapeResult:
 
 
 class BaseScraper:
-    """Base class for all site-specific scrapers."""
-
     site_name: str = ""
     listing_url: str = ""
-    request_delay: float = 1.5  # seconds between requests
+    request_delay: float = 1.5
 
     def __init__(self):
         self.fetcher = Fetcher()
 
     def get_article_links(self, page) -> list[str]:
-        """Return list of absolute article URLs from the listing page."""
         raise NotImplementedError
 
     def parse_article(self, page, url: str) -> Article | None:
-        """Parse a full article page and return an Article, or None on failure."""
         raise NotImplementedError
 
-    def run(self, blacklist: list[str] | None = None) -> ScrapeResult:
+    def run(self, credentials: dict, blacklist: list[str] | None = None) -> ScrapeResult:
         result = ScrapeResult(source_site=self.site_name)
         try:
             page = self.fetcher.get(self.listing_url)
@@ -54,7 +50,7 @@ class BaseScraper:
 
             for link in links:
                 try:
-                    self._process_article(link, result, blacklist)
+                    self._process_article(link, result, credentials, blacklist)
                 except Exception as exc:
                     result.articles_filtered += 1
                     print(f"[{self.site_name}] Error processing {link}: {exc}")
@@ -73,8 +69,7 @@ class BaseScraper:
         )
         return result
 
-    def _process_article(self, url: str, result: ScrapeResult, blacklist: list[str] | None) -> None:
-        # Deduplication check
+    def _process_article(self, url: str, result: ScrapeResult, credentials: dict, blacklist: list[str] | None) -> None:
         if is_url_published(url):
             result.articles_filtered += 1
             return
@@ -86,30 +81,26 @@ class BaseScraper:
             result.articles_filtered += 1
             return
 
-        # Violence filter
         if is_violent_content(article.title, article.body, blacklist):
             result.articles_filtered += 1
             return
 
-        # Category classification
         category = classify_article(article.title, article.first_paragraph or article.body[:300])
 
-        # Upload featured image
         media_id = None
         if article.image_url:
             filename = article.image_url.split("/")[-1].split("?")[0] or "image.jpg"
-            media_id = upload_image(article.image_url, filename)
+            media_id = upload_image(article.image_url, filename, credentials)
 
-        # Publish to WordPress
         wp_id = create_post(
             title=article.title,
             content=article.body,
             category_name=category,
             featured_media_id=media_id,
+            credentials=credentials,
             source_url=url,
         )
 
-        # Log to Supabase
         log_published_url(
             url=url,
             title=article.title,
