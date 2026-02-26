@@ -30,20 +30,16 @@ class TribunaHojeScraper(BaseScraper):
         return links[:20]
 
     def parse_article(self, soup: BeautifulSoup, url: str) -> Article | None:
-        # TribunaHoje uses h2 for article title
-        title_el = (
-            soup.select_one("h1")
-            or soup.select_one("h2.title")
-            or soup.select_one("h2")
-        )
+        # Real article title is in h1.news-header__title (h1 alone picks up category name)
+        title_el = soup.select_one("h1.news-header__title")
         if not title_el:
             return None
         title = title_el.get_text(strip=True)
         if not title:
             return None
 
-        # Body: <p> tags after the byline
-        content_el = soup.select_one("article") or soup.select_one(".news-content") or soup.select_one("main")
+        # Body: <p> tags inside section.news-content
+        content_el = soup.select_one("section.news-content") or soup.select_one("article")
         if content_el:
             paragraphs = content_el.select("p")
             body = "\n".join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
@@ -52,10 +48,11 @@ class TribunaHojeScraper(BaseScraper):
 
         first_para = body.split("\n")[0] if body else ""
 
+        # Image inside <figure> > <picture> > <img>
         img_el = (
-            soup.select_one("img[src*='s3.tribunahoje.com']")
-            or soup.select_one("article img")
-            or soup.select_one(".news-image img")
+            soup.select_one("header.news-header figure picture img")
+            or soup.select_one("figure picture img")
+            or soup.select_one("img[src*='s3.tribunahoje.com']")
         )
         image_url = img_el.get("src") if img_el else None
 

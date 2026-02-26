@@ -30,18 +30,14 @@ class JornalDeAlagoasScraper(BaseScraper):
         return links[:20]
 
     def parse_article(self, soup: BeautifulSoup, url: str) -> Article | None:
-        title_el = (
-            soup.select_one("h1")
-            or soup.select_one("h2.title")
-            or soup.select_one("h2")
-        )
+        title_el = soup.select_one("h1.news-header__title")
         if not title_el:
             return None
         title = title_el.get_text(strip=True)
         if not title:
             return None
 
-        content_el = soup.select_one("article") or soup.select_one(".news-body") or soup.select_one("main")
+        content_el = soup.select_one("section.news-content") or soup.select_one("article")
         if content_el:
             paragraphs = content_el.select("p")
             body = "\n".join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
@@ -51,9 +47,9 @@ class JornalDeAlagoasScraper(BaseScraper):
         first_para = body.split("\n")[0] if body else ""
 
         img_el = (
-            soup.select_one("img[src*='digitaloceanspaces.com']")
-            or soup.select_one("article img")
-            or soup.select_one(".news-img img")
+            soup.select_one("header.news-header figure picture img")
+            or soup.select_one("figure picture img")
+            or soup.select_one("img[src*='digitaloceanspaces.com']")
         )
         image_url = img_el.get("src") if img_el else None
 
