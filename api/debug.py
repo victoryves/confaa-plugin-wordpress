@@ -19,10 +19,10 @@ except Exception as e:
     results["supabase"] = str(e)
 
 try:
-    from scrapling import Fetcher
-    results["scrapling"] = "ok"
+    from bs4 import BeautifulSoup
+    results["beautifulsoup4"] = "ok"
 except Exception as e:
-    results["scrapling"] = str(e)
+    results["beautifulsoup4"] = str(e)
 
 try:
     import requests
