@@ -1,0 +1,16 @@
+{
+  "functions": {
+    "api/**/*.py": {
+      "runtime": "python3.12",
+      "maxDuration": 60
+    }
+  },
+  "env": {
+    "SUPABASE_URL": "@supabase-url",
+    "SUPABASE_SERVICE_KEY": "@supabase-service-key",
+    "WP_URL": "@wp-url",
+    "WP_USERNAME": "@wp-username",
+    "WP_APP_PASSWORD": "@wp-app-password",
+    "API_SECRET_KEY": "@api-secret-key"
+  }
+}
